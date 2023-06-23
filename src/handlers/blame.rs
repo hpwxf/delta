@@ -270,21 +270,26 @@ pub fn format_blame_metadata(
         let width = placeholder.width.unwrap_or(15);
 
         let field = match placeholder.placeholder {
-            Some(Placeholder::Str("timestamp")) => {
-                Some(Cow::from(match &config.blame_timestamp_output_format {
+            Some(Placeholder::Str("timestamp")) => Some((
+                Cow::from(match &config.blame_timestamp_output_format {
                     Some(time_format) => blame.time.format(time_format).to_string(),
                     None => chrono_humanize::HumanTime::from(blame.time).to_string(),
-                }))
+                }),
+                0,
+            )),
+            Some(Placeholder::Str("author")) => {
+                // Unicode modifier should not be counted as character to allow a consistent padding
+                let unicode_modifier_width =
+                    blame.author.chars().count() - UnicodeWidthStr::width(blame.author);
+                Some((Cow::from(blame.author), unicode_modifier_width))
             }
-            Some(Placeholder::Str("author")) => Some(Cow::from(blame.author)),
-            Some(Placeholder::Str("commit")) => Some(delta::format_raw_line(blame.commit, config)),
+            Some(Placeholder::Str("commit")) => {
+                Some((delta::format_raw_line(blame.commit, config), 0))
+            }
             None => None,
             _ => unreachable!("Unexpected `git blame` input"),
         };
-        if let Some(field) = field {
-            // Unicode modifier should not be counted as character to allow a consistent padding
-            let unicode_modifier_width =
-                field.as_ref().chars().count() - UnicodeWidthStr::width(field.as_ref());
+        if let Some((field, unicode_modifier_width)) = field {
             s.push_str(&format::pad(
                 &field,
                 width + unicode_modifier_width,
